@@ -21,7 +21,7 @@ private:
 	void clear();
 	void render();
 	void find();
-	void around(Tile &tile);
+	std::vector< std::vector<int> > around(Tile &tile);
 	void trace();
 	void set_state(Tile &tile, std::string state);
 	void handleMouseEvent(sf::Mouse::Button button, bool IsPressed);
@@ -30,15 +30,17 @@ private:
 private:
 	sf::RenderWindow mWindow;
 	sf::Texture og_tile;
-	std::vector<std::vector<Tile> > tiles;
+	std::vector< std::vector<Tile> > tiles;
 	bool mouse_pressed, running_find, tracing;
 	std::string mouse_button;
 	std::string working_dir;
 	float mWidth, mHeight;
 	unsigned int width, height;
 	unsigned int mouseX, mouseY;
-	int tested[WindowWidth * WindowHeight / 100][2], next_tested[WindowWidth * WindowHeight / 100][2], next[WindowWidth * WindowHeight / 100][2];
-	int next_size, next_tested_size, tested_size;
+	
+	std::vector< std::vector<int> > openList;
+	std::vector< std::vector<int> > closedList;
+	std::vector< std::vector<int> > traversedList;
 	Tile* begin, * end;
 };
 #endif

@@ -1,4 +1,7 @@
 #include "Game.hpp"
+#include <algorithm>
+#include <cmath>
+#include <vector>
 Game::Game() :
 	mWindow(sf::VideoMode(WindowWidth, WindowHeight), "Maze Solver"),
 	og_tile()
@@ -11,13 +14,10 @@ Game::Game() :
 	working_dir = "src/resources/";
 
 	mouseX = 0, mouseY = 0;
-	next_size = 0, next_tested_size = 0, tested_size = 0;
-
 
 	mWindow.setFramerateLimit(30);
 	std::string message;
 	message = "Keys\tFunction\n";
-	message += "B\tMake All Empty Blocks Wall\n";
 	message += "C\tClear Screen\n";
 	message += "SPACE\tStart Tracing\n";
 	std::cout << message << std::endl;
@@ -28,6 +28,8 @@ Game::Game() :
 	width = (unsigned int)(mWidth / 10.0f);
 	height = (unsigned int)(mHeight / 10.0f);
 	generateTiles();
+
+	openList.push_back(std::vector<int>{begin->x_pos, begin->y_pos});
 }
 
 void Game::run()
@@ -71,6 +73,7 @@ void Game::processEvents()
 		
 		default:
 			break;
+
 		}
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Space))
 		{
@@ -80,19 +83,7 @@ void Game::processEvents()
 		{
 			clear();
 		}
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::B))
-		{
-			for (int i = 0; i < width; i++)
-			{
-				for (int j = 0; j < height; j++)
-				{
-					if (tiles[i][j].state == "empty")
-					{
-						set_state(tiles[i][j], "wall");
-					}
-				}
-			}
-		}
+		
 	}
 	mouseX = mouse.getPosition(mWindow).x;
 	mouseY = mouse.getPosition(mWindow).y;
@@ -120,16 +111,47 @@ void Game::update(sf::Time dt)
 }
 void Game::clear()
 {
-	tiles.clear();
-	next_size = 0;
-	next_tested_size = 0;
-	tested_size = 0;
-	generateTiles();
+	openList.clear();
+	closedList.clear();
+	traversedList.clear();
+	for (unsigned int i = 0; i < width; i++)
+	{
+		for (unsigned int j = 0; j < height; j++)
+		{
 
+			Tile& thisTile = tiles[i][j];
+			if (i == 0 || i == (width - 1))
+			{
+				set_state(thisTile, "wall");
+			}
+			else if (j == 0 || j == (height - 1))
+			{
+				set_state(thisTile, "wall");
+			}
+			else {
+				set_state(thisTile, "empty");
+			}
+			
+		}
+		
+	}
+	set_state(tiles[4][56], "begin");
+	set_state(tiles[76][4], "end");
+	openList.push_back(std::vector<int>{begin->x_pos, begin->y_pos});
 
 }
 void Game::render()
 {
+	for (auto i : openList) {
+		tiles[i[0]][i[1]].setColor(sf::Color::Yellow);
+	}
+	for (auto i : closedList) {
+		tiles[i[0]][i[1]].setColor(sf::Color::Green);
+	}
+	for (auto i : traversedList) {
+		tiles[i[0]][i[1]].setColor(sf::Color::Blue);
+	}
+
 	mWindow.clear(sf::Color(255, 255, 255, 255));
 	for (int i = 0; i < width; i++)
 	{
@@ -141,38 +163,46 @@ void Game::render()
 	mWindow.display();
 }
 
+double getDistance(std::vector<int> from, std::vector<int> to) {
+
+	return (from[0] - to[0]) * (from[0] - to[0]) + (from[1] - to[1]) * (from[1] - to[1]);
+}
+
 void Game::find()
 {
 	running_find = true;
-	if (!(end->state == "next"))
+	if (end->state != "next_tested" && openList.size() != 0)
 	{
-		if (next_size == 0)
-		{
-			running_find = false;
-			std::cout << "No solution" << std::endl;
-			clear();
-			return;
+		std::vector<int> current = openList[0];
+		for (auto i : openList) {
+			if (tiles[i[0]][i[1]].F < tiles[current[0]][current[1]].F || 
+				(tiles[i[0]][i[1]].F == tiles[current[0]][current[1]].F &&
+				tiles[i[0]][i[1]].H < tiles[current[0]][current[1]].H)) {
+					current = i;
+			}
 		}
-		for (int i = 0; i < next_size; i++)
-		{
-			next_tested[i][0] = next[i][0];
-			next_tested[i][1] = next[i][1];
-			tiles[next_tested[i][0]][next_tested[i][1]].set_state("next_tested");
-			tiles[next_tested[i][0]][next_tested[i][1]].setColor(sf::Color::Green);
-			next_tested_size++;
-		}
-		next_size = 0;
-		for (int i = 0; i < next_tested_size; i++)
-		{
-			around(tiles[next_tested[i][0]][next_tested[i][1]]);
-			tested[tested_size][0] = next_tested[i][0];
-			tested[tested_size][1] = next_tested[i][1];
 
-			tiles[tested[tested_size][0]][tested[tested_size][1]].set_state("tested");
-			tiles[tested[tested_size][0]][tested[tested_size][1]].setColor(sf::Color::Green);
-			tested_size++;
+		closedList.push_back(current);
+		openList.erase(std::find(openList.begin(), openList.end(), current));
+
+
+		for (auto neighborLoc : around(tiles[current[0]][current[1]])) {
+			bool inSearch = std::find(openList.begin(), openList.end(), neighborLoc) != openList.end();
+			double costToNeighbor = tiles[current[0]][current[1]].G + getDistance(current, neighborLoc);
+
+			if (!inSearch || costToNeighbor < tiles[neighborLoc[0]][neighborLoc[1]].G) {
+				tiles[neighborLoc[0]][neighborLoc[1]].G = costToNeighbor;
+				tiles[neighborLoc[0]][neighborLoc[1]].set_previous(&tiles[current[0]][current[1]]);
+				set_state(tiles[neighborLoc[0]][neighborLoc[1]], "next_tested");
+
+				if (!inSearch) {
+					tiles[neighborLoc[0]][neighborLoc[1]].H = getDistance(neighborLoc, std::vector<int>{end->x_pos, end->y_pos});
+					openList.push_back(neighborLoc);
+				}
+			}
+
 		}
-		next_tested_size = 0;
+
 	}
 	else
 	{
@@ -181,49 +211,40 @@ void Game::find()
 	}
 }
 
-void Game::around(Tile &tile)
+std::vector< std::vector<int> > Game::around(Tile &tile)
 {
-	unsigned int x = tile.x_pos;
-	unsigned int y = tile.y_pos;
+	int x = tile.x_pos;
+	int y = tile.y_pos;
 
-	if ((tiles[x + 1][y].state == "end" || tiles[x + 1][y].state == "empty"))
-	{
-		tiles[x + 1][y].set_state("next");
-		tiles[x + 1][y].setColor(sf::Color::Yellow);
-		tiles[x + 1][y].set_previous(&tile);
-		next[next_size][0] = x + 1;
-		next[next_size][1] = y;
-		next_size++;
-	}
-	if ((tiles[x - 1][y].state == "end" || tiles[x - 1][y].state == "empty"))
-	{
-		tiles[x - 1][y].set_state("next");
-		tiles[x - 1][y].setColor(sf::Color::Yellow);
-		tiles[x - 1][y].set_previous(&tile);
-		next[next_size][0] = x - 1;
-		next[next_size][1] = y;
-		next_size++;
-	}
+	std::vector< std::vector<int> > locs = {
+		{x + 1, y}, 
+		{x , y + 1},
+		{x - 1, y},
+		{x, y - 1}
+	};
+	
+	std::vector< std::vector<int> > result;
 
-	if ((tiles[x][y + 1].state == "end" || tiles[x][y + 1].state == "empty"))
-	{
-		tiles[x][y + 1].set_state("next");
-		tiles[x][y + 1].setColor(sf::Color::Yellow);
-		tiles[x][y + 1].set_previous(&tile);
-		next[next_size][0] = x;
-		next[next_size][1] = y + 1;
-		next_size++;
+	for (auto i : locs) {
+		int tileRow = i[0];
+		int tileCol = i[1];
+
+		if (tileRow >= this->tiles.size() || tileRow < 0) {
+			continue;
+		}
+		if (tileCol >= this->tiles[0].size() || tileCol < 0) {
+			continue;
+		}
+
+		if (this->tiles[tileRow][tileCol].state != "wall" &&
+			(std::find(closedList.begin(), closedList.end(), i) == closedList.end())) {
+			result.push_back(i);
+		}
 	}
 
-	if ((tiles[x][y - 1].state == "end" || tiles[x][y - 1].state == "empty"))
-	{
-		tiles[x][y - 1].set_state("next");
-		tiles[x][y - 1].setColor(sf::Color::Yellow);
-		tiles[x][y - 1].set_previous(&tile);
-		next[next_size][0] = x;
-		next[next_size][1] = y - 1;
-		next_size++;
-	}
+
+	return result;
+
 }
 
 void Game::set_state(Tile& tile, std::string state)
@@ -244,7 +265,7 @@ void Game::set_state(Tile& tile, std::string state)
 		end = &tile;
 	}
 	else if (state == "tested") tile.setColor(sf::Color::Green);
-	else if (state == "next_tested") tile.setColor(sf::Color::Green);
+	else if (state == "next_tested") tile.setColor(sf::Color::Yellow);
 	else tile.setColor(sf::Color::Yellow);
 }
 
@@ -307,7 +328,6 @@ void Game::generateTiles()
 		tiles.push_back(these_tiles);
 	}
 	set_state(tiles[4][56], "begin");
-	around(tiles[4][56]);
 	set_state(tiles[76][4], "end");
 }
 void Game::meta_tiles_listen_event()
@@ -341,9 +361,9 @@ void Game::meta_tiles_listen_event()
 
 void Game::trace()
 {
-	end->setColor(sf::Color::Blue);
+	traversedList.push_back(std::vector<int>{end->x_pos, end->y_pos});
 	end = end->get_previous();
-	if (end->state == "begin")
+	if (end == begin)
 	{
 		tracing = false;
 	}
