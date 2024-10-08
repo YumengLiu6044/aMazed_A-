@@ -1,4 +1,5 @@
 #include "Game.hpp"
+#include <__config>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -138,6 +139,8 @@ void Game::clear()
 	set_state(tiles[4][56], "begin");
 	set_state(tiles[76][4], "end");
 	openList.push_back(std::vector<int>{begin->x_pos, begin->y_pos});
+	begin = &tiles[4][56];
+	end = &tiles[76][4];
 
 }
 void Game::render()
@@ -171,8 +174,12 @@ double getDistance(std::vector<int> from, std::vector<int> to) {
 void Game::find()
 {
 	running_find = true;
-	if (end->state != "next_tested" && openList.size() != 0)
+	if (end->state != "next_tested")
 	{
+		if (openList.size() == 0) {
+			clear();
+			running_find = false;
+		}
 		std::vector<int> current = openList[0];
 		for (auto i : openList) {
 			if (tiles[i[0]][i[1]].F < tiles[current[0]][current[1]].F || 
@@ -362,9 +369,12 @@ void Game::meta_tiles_listen_event()
 void Game::trace()
 {
 	traversedList.push_back(std::vector<int>{end->x_pos, end->y_pos});
+	Tile* tempTile = end;
 	end = end->get_previous();
 	if (end == begin)
-	{
+	{	
+		clear();
 		tracing = false;
 	}
+	tempTile->set_previous(nullptr);
 }
